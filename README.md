@@ -1,4 +1,4 @@
-# 📘 CRM SALE – DATA CONTEXT (AppSheet)
+# 📘 CRM SALE – DATA CONTEXT (Final Version)
 
 ## 🎯 Mục tiêu hệ thống
 - Quản lý nhân sự (Admin / Leader / Nhân viên)
@@ -10,25 +10,28 @@
 
 ---
 
-# 🧩 DANH SÁCH BẢNG
+## 🧩 Danh sách bảng
 
-1. users
-2. user_role_map
-3. salon
-4. log_sale
-5. hop_dong_salon
-6. bang_luong
+### Bảng chính
+1. `users`
+2. `salon`
+3. `log_sale`
+4. `hop_dong_salon`
+5. `bang_luong`
+
+### View
+- `vw_salon_van_hanh`
 
 ---
 
-# 1️⃣ BẢNG users (NHÂN SỰ)
+## 1️⃣ BẢNG `users` (NHÂN SỰ)
 
-## Mục đích
+### Mục đích
 - Lưu thông tin nhân viên
 - Dùng để đăng nhập AppSheet
-- Là bảng trung tâm liên kết toàn hệ thống
+- Là bảng trung tâm phân quyền toàn hệ thống
 
-## Cột dữ liệu
+### Cột dữ liệu
 
 | Cột | Mô tả |
 |-----|------|
@@ -36,97 +39,175 @@
 | email | Email đăng nhập |
 | ho_ten | Tên nhân viên |
 | so_dien_thoai | SĐT |
+| ngay_sinh | Ngày sinh |
 | vai_tro | Admin / Leader / Nhân viên |
-| bo_phan | Sale / Vận hành |
+| bo_phan | Sale / Vận hành / Dev |
 | luong_cung | Lương cứng |
 | ngay_vao_lam | Ngày vào |
-| trang_thai | Hoạt động / Nghỉ / Khóa |
-| file_hop_dong_maby | File hợp đồng |
+| trang_thai | Đang làm / Đã nghỉ |
+| file_hop_dong | Link hợp đồng nhân sự |
 | ghi_chu | Ghi chú |
 | tao_luc | Thời gian tạo |
 | cap_nhat_luc | Thời gian cập nhật |
 
+### Quyền
+
+#### Admin
+- Full quyền
+
+#### Leader
+- Xem nhân sự theo phạm vi được phép
+- Không sửa người khác
+
+#### Nhân viên
+- Chỉ xem chính mình
+- Chỉ được sửa:
+  - `so_dien_thoai`
+  - `ngay_sinh`
+
+### Quy tắc đặc biệt
+- User `Đã nghỉ`:
+  - vẫn giữ dữ liệu
+  - ẩn khỏi danh sách active
+  - không dùng để chọn trong hệ thống
+
 ---
 
-# 2️⃣ BẢNG user_role_map (PHÂN QUYỀN)
+## 2️⃣ BẢNG `salon`
 
-## Mục đích
-- Dùng để lookup quyền
-- Tránh lỗi filter bảng users
+### Mục đích
+- Danh sách khách hàng (lead)
+- Sale phụ trách và chăm sóc
 
-## Cột
-
-| Cột | Mô tả |
-|-----|------|
-| email | Email user |
-| vai_tro | Role |
-| bo_phan | Bộ phận |
-
----
-
-# 3️⃣ BẢNG salon
-
-## Mục đích
-- Danh sách khách hàng
-- Sale tự tạo và quản lý
-
-## Cột
+### Cột dữ liệu
 
 | Cột | Mô tả |
 |-----|------|
 | id | ID salon |
 | ten_salon | Tên salon |
 | chu_salon | Chủ salon |
-| so_dien_thoai | Liên hệ |
+| so_dien_thoai | SĐT liên hệ |
+| hotline | Hotline salon |
 | facebook | Fanpage |
 | dia_chi | Địa chỉ |
 | khu_vuc | Khu vực |
 | nguon_khach | Nguồn lead |
-| sale_id | Người phụ trách |
+| sale_id | Sale phụ trách |
 | trang_thai_pipeline | Trạng thái |
-| ngay_tiep_can_dau | Ngày bắt đầu |
+| ngay_tiep_can_dau | Ngày tiếp cận |
 | ghi_chu | Ghi chú |
 | tao_luc | Tạo |
 | cap_nhat_luc | Update |
 
+### Quyền
+
+#### Admin
+- Full quyền
+
+#### Nhân viên Sale
+- Chỉ xem salon của mình
+- Tạo / sửa salon của mình
+
+#### Leader Sale
+- Xem toàn bộ salon bộ phận sale
+- Sửa salon
+- Phân salon cho sale
+
+#### Vận hành
+- Không dùng bảng này trực tiếp để thao tác
+
+### Quy tắc nghiệp vụ
+
+#### Ownership
+- 1 salon = 1 sale phụ trách
+
+#### Chống trùng
+- Trùng khi đồng thời trùng:
+  - `dia_chi`
+  - `so_dien_thoai`
+
+#### Khi tạo salon
+- Nhân viên Sale → tự gán `sale_id = người đang đăng nhập`
+- Leader/Admin → được chọn `sale_id`
+
+### Pipeline
+- `Mới tạo`
+- `Đang tiếp cận`
+- `Đang chăm`
+- `Đã chốt`
+- `Hủy`
+
 ---
 
-# 4️⃣ BẢNG log_sale
+## 3️⃣ VIEW `vw_salon_van_hanh`
 
-## Mục đích
-- Lưu lịch sử làm việc với khách
+### Mục đích
+- Phục vụ bộ phận vận hành
+- Tách khỏi bảng gốc để khóa quyền
 
-## Cột
+### Dữ liệu
+- Hiển thị toàn bộ cột của `salon`
+
+### Quyền
+
+#### Nhân viên vận hành
+- Xem tất cả salon
+- Không sửa
+
+#### Leader vận hành
+- Xem tất cả salon
+- Không sửa
+
+---
+
+## 4️⃣ BẢNG `log_sale`
+
+### Mục đích
+- Lưu lịch sử làm việc với salon
+
+### Cột dữ liệu
 
 | Cột | Mô tả |
 |-----|------|
 | id | ID |
 | salon_id | Salon |
-| sale_id | Người thực hiện |
+| sale_id | Người tạo |
 | ngay_gio | Thời gian |
-| hinh_thuc | Gọi / Nhắn / Gặp |
 | noi_dung | Nội dung |
-| ket_qua | Kết quả |
-| trang_thai_sau_log | Pipeline |
-| lich_hen_tiep_theo | Follow-up |
 | tao_luc | Tạo |
 | cap_nhat_luc | Update |
 
+### Quyền
+
+#### Admin
+- Xem / sửa tất cả
+
+#### Nhân viên Sale
+- Chỉ xem log của mình
+- Chỉ sửa log của mình
+
+#### Leader Sale
+- Xem tất cả log bộ phận sale
+- Không sửa
+
+#### Vận hành
+- Không xem
+
 ---
 
-# 5️⃣ BẢNG hop_dong_salon
+## 5️⃣ BẢNG `hop_dong_salon`
 
-## Mục đích
+### Mục đích
 - Quản lý hợp đồng
 - Tính hoa hồng
 
-## Cột
+### Cột dữ liệu
 
 | Cột | Mô tả |
 |-----|------|
 | id | ID |
 | salon_id | Salon |
-| sale_id | Người chốt |
+| sale_id | Sale phụ trách |
 | ma_hop_dong | Mã |
 | ngay_chot | Ngày |
 | goi_dich_vu | Gói |
@@ -140,14 +221,32 @@
 | tao_luc | Tạo |
 | cap_nhat_luc | Update |
 
+### Quyền
+
+#### Admin
+- Full quyền
+
+#### Leader Sale
+- Xem tất cả hợp đồng bộ phận sale
+- Tạo hợp đồng
+- Sửa hợp đồng
+
+#### Nhân viên Sale
+- Không xem
+- Không tạo
+- Không sửa
+
+#### Vận hành
+- Không xem
+
 ---
 
-# 6️⃣ BẢNG bang_luong
+## 6️⃣ BẢNG `bang_luong`
 
-## Mục đích
-- Tổng hợp lương
+### Mục đích
+- Tổng hợp lương & hoa hồng
 
-## Cột
+### Cột dữ liệu
 
 | Cột | Mô tả |
 |-----|------|
@@ -165,41 +264,48 @@
 | tao_luc | Tạo |
 | cap_nhat_luc | Update |
 
----
+### Quyền
 
-# 🔐 PHÂN QUYỀN
+#### Admin
+- Full quyền
 
-## Admin
-- toàn quyền
+#### Nhân viên
+- Chỉ xem lương chính mình
 
-## Leader
-- xem nhân viên cùng bộ phận
-- không được sửa
-
-## Nhân viên
-- chỉ xem chính mình
-- chỉ sửa ngày sinh, giới tính
+#### Leader
+- Chỉ xem lương của chính leader
+- Không xem lương người khác
 
 ---
 
-# 🔗 QUAN HỆ
-
-- salon.sale_id → users.id
-- log_sale.salon_id → salon.id
-- log_sale.sale_id → users.id
-- hop_dong_salon.sale_id → users.id
-- bang_luong.user_id → users.id
+## 🔗 Quan hệ
+- `salon.sale_id` → `users.id`
+- `log_sale.salon_id` → `salon.id`
+- `log_sale.sale_id` → `users.id`
+- `hop_dong_salon.salon_id` → `salon.id`
+- `hop_dong_salon.sale_id` → `users.id`
+- `bang_luong.user_id` → `users.id`
 
 ---
 
-# 🚀 FLOW
-
+## 🚀 Flow hệ thống
 1. Admin tạo user
-2. Sale login
+2. Sale đăng nhập
 3. Sale tạo salon
-4. Sale tạo log
-5. Sale chốt hợp đồng
-6. Tính hoa hồng
-7. Tổng hợp lương
+4. Sale cập nhật log
+5. Leader theo dõi & quản lý
+6. Leader tạo hợp đồng khi chốt
+7. Hệ thống tính hoa hồng
+8. Tổng hợp bảng lương
 
+---
 
+## ✅ Ghi chú kiến trúc
+- Không dùng `user_role_map`
+- Phân quyền dựa vào:
+  - `vai_tro`
+  - `bo_phan`
+- Tách view `vw_salon_van_hanh` để:
+  - giảm rủi ro sửa nhầm
+  - đơn giản hóa quyền vận hành
+- Dữ liệu được giữ lại khi nhân sự nghỉ để phục vụ audit
