@@ -1,0 +1,572 @@
+# 📙 CRM SALE – AppSheet Mapping Guide
+
+Tài liệu này map từ logic nghiệp vụ sang AppSheet theo 3 lớp:
+1. `Security Filter` – chặn dữ liệu tải về thiết bị người dùng
+2. `Slice Row Filter` – tách view theo vai trò/phòng ban
+3. `Editable_If` / `Are updates allowed?` – khóa quyền sửa
+
+> Nguyên tắc: dữ liệu nhạy cảm như `users`, `hop_dong_salon`, `bang_luong`, `log_sale` phải ưu tiên khóa bằng **Security Filter**. Slice chỉ dùng để tổ chức UI, không thay thế security filter.
+
+---
+
+# 1. Helper expressions dùng lặp lại
+
+## 1.1 Lấy vai trò user hiện tại
+```appsheet
+LOOKUP(USEREMAIL(), "users", "email", "vai_tro")
+```
+
+## 1.2 Lấy bộ phận user hiện tại
+```appsheet
+LOOKUP(USEREMAIL(), "users", "email", "bo_phan")
+```
+
+## 1.3 Lấy id user hiện tại
+```appsheet
+LOOKUP(USEREMAIL(), "users", "email", "id")
+```
+
+## 1.4 Kiểm tra Admin
+```appsheet
+LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin"
+```
+
+## 1.5 Kiểm tra Leader Sale
+```appsheet
+AND(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+  LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+)
+```
+
+## 1.6 Kiểm tra Vận hành (cả leader và nhân viên)
+```appsheet
+IN(
+  LOOKUP(USEREMAIL(), "users", "email", "bo_phan"),
+  LIST("Vận hành")
+)
+```
+
+---
+
+# 2. Bảng `users`
+
+## 2.1 Security Filter
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+    [bo_phan] = LOOKUP(USEREMAIL(), "users", "email", "bo_phan")
+  ),
+
+  [email] = USEREMAIL()
+)
+```
+
+## 2.2 Ý nghĩa
+- Admin: thấy tất cả user
+- Leader: thấy user cùng bộ phận
+- Nhân viên: chỉ thấy chính mình
+
+## 2.3 Slice gợi ý
+
+### `users_active`
+Row filter:
+```appsheet
+[trang_thai] = "Đang làm"
+```
+
+### `users_nghi_viec`
+Row filter:
+```appsheet
+[trang_thai] = "Đã nghỉ"
+```
+
+> Dùng slice để tách màn hình active / nghỉ việc. Không dùng slice để thay thế security filter.
+
+## 2.4 Editable_If từng cột
+
+### `so_dien_thoai`
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  [email] = USEREMAIL()
+)
+```
+
+### `ngay_sinh`
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  [email] = USEREMAIL()
+)
+```
+
+### Các cột còn lại trong `users`
+- Admin: sửa được
+- Người khác: không sửa
+
+Công thức mẫu cho các cột khóa cứng như `vai_tro`, `bo_phan`, `luong_cung`, `ngay_vao_lam`, `trang_thai`, `file_hop_dong`, `ghi_chu`, `ho_ten`, `email`:
+```appsheet
+LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin"
+```
+
+## 2.5 Are updates allowed?
+Khuyên dùng:
+- Bảng `users`: `Adds_And_Updates`
+- Delete: chỉ để admin bằng action riêng hoặc datasource-level control
+
+Nếu muốn khóa add/update cho non-admin ở cấp bảng, dùng expression:
+```appsheet
+LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin"
+```
+```
+
+---
+
+# 3. Bảng `salon`
+
+## 3.1 Security Filter
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  ),
+
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Nhân viên",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale",
+    [sale_id] = LOOKUP(USEREMAIL(), "users", "email", "id")
+  )
+)
+```
+
+## 3.2 Ý nghĩa
+- Admin: thấy toàn bộ salon
+- Leader Sale: thấy toàn bộ salon
+- Nhân viên Sale: chỉ thấy salon mình phụ trách
+- Vận hành: **không cần vào bảng gốc `salon`** nếu đã có `vw_salon_van_hanh`
+
+## 3.3 Are updates allowed?
+Gợi ý cho bảng `salon`:
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  ),
+
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Nhân viên",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  )
+)
+```
+
+## 3.4 Editable_If cột `sale_id`
+Rất quan trọng vì đây là cột phân salon.
+
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  )
+)
+```
+
+Như vậy:
+- Leader Sale/Admin được đổi người phụ trách
+- Nhân viên Sale không được tự đổi `sale_id`
+
+## 3.5 Initial value cho `sale_id`
+Để khi nhân viên sale tạo mới salon thì tự gán chính mình:
+```appsheet
+IFS(
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Nhân viên",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  ),
+  LOOKUP(USEREMAIL(), "users", "email", "id")
+)
+```
+
+> Với Leader/Admin, để trống để họ tự chọn.
+
+## 3.6 Valid_If cho `sale_id`
+Chỉ cho chọn user đang làm của bộ phận sale:
+```appsheet
+SELECT(
+  users[id],
+  AND(
+    [bo_phan] = "Sale",
+    [trang_thai] = "Đang làm"
+  )
+)
+```
+
+## 3.7 Chống trùng salon
+Khuyên thêm cột virtual hoặc physical `khoa_chong_trung`:
+```appsheet
+LOWER(TRIM([dia_chi])) & "|" & TRIM([so_dien_thoai])
+```
+
+Rồi đặt `Valid_If` ở `khoa_chong_trung` hoặc ngay ở form lưu salon:
+```appsheet
+COUNT(
+  SELECT(
+    salon[id],
+    AND(
+      [dia_chi] = [_THISROW].[dia_chi],
+      [so_dien_thoai] = [_THISROW].[so_dien_thoai],
+      [id] <> [_THISROW].[id]
+    )
+  )
+) = 0
+```
+
+---
+
+# 4. View `vw_salon_van_hanh`
+
+## 4.1 Nên làm thế nào?
+Có 2 cách:
+- dùng **database view thật** trong PostgreSQL
+- hoặc dùng **slice read-only** từ bảng `salon`
+
+Vì anh đã chốt tách riêng để dễ nhìn và dễ khóa, khuyên dùng:
+- nếu DB chủ động: tạo `vw_salon_van_hanh` ở DB
+- nếu muốn làm nhanh trong AppSheet: tạo slice `vw_salon_van_hanh_slice`
+
+## 4.2 Security Filter cho `vw_salon_van_hanh`
+Nếu là bảng/view riêng trong AppSheet:
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Vận hành"
+)
+```
+
+> Có thể thêm `Leader Sale` nếu anh muốn leader sale cũng dùng view này, nhưng hiện logic của anh không cần.
+
+## 4.3 Are updates allowed?
+- Đặt `Read-only`
+
+Không cần Editable_If nữa nếu cả view đã read-only.
+
+---
+
+# 5. Bảng `log_sale`
+
+## 5.1 Security Filter
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  ),
+
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Nhân viên",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale",
+    [sale_id] = LOOKUP(USEREMAIL(), "users", "email", "id")
+  )
+)
+```
+
+## 5.2 Ý nghĩa
+- Admin: thấy tất cả log
+- Leader Sale: thấy tất cả log bộ phận sale
+- Nhân viên Sale: chỉ thấy log do mình tạo
+- Vận hành: không thấy
+
+## 5.3 Are updates allowed?
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Nhân viên",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  )
+)
+```
+
+## 5.4 Khóa sửa log của người khác bằng Editable_If toàn cột
+Áp công thức này cho các cột nhân viên được sửa như `ngay_gio`, `noi_dung`:
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Nhân viên",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale",
+    [sale_id] = LOOKUP(USEREMAIL(), "users", "email", "id")
+  )
+)
+```
+
+## 5.5 Initial value cho `sale_id`
+```appsheet
+LOOKUP(USEREMAIL(), "users", "email", "id")
+```
+
+## 5.6 Valid_If cho `salon_id` với nhân viên sale
+Nếu muốn nhân viên chỉ log trên salon mình phụ trách:
+```appsheet
+SELECT(
+  salon[id],
+  [sale_id] = LOOKUP(USEREMAIL(), "users", "email", "id")
+)
+```
+
+Với Admin/Leader Sale có thể cần nới logic bằng `IFS()` hoặc dùng slice form riêng.
+
+---
+
+# 6. Bảng `hop_dong_salon`
+
+## 6.1 Security Filter
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  )
+)
+```
+
+## 6.2 Ý nghĩa
+- Chỉ Admin và Leader Sale tải được dữ liệu hợp đồng
+- Nhân viên Sale và Vận hành không nhìn thấy
+
+## 6.3 Are updates allowed?
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  )
+)
+```
+
+## 6.4 Valid_If cho `sale_id`
+Chỉ chọn nhân viên sale đang làm:
+```appsheet
+SELECT(
+  users[id],
+  AND(
+    [bo_phan] = "Sale",
+    [trang_thai] = "Đang làm"
+  )
+)
+```
+
+---
+
+# 7. Bảng `bang_luong`
+
+## 7.1 Security Filter
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  [user_id] = LOOKUP(USEREMAIL(), "users", "email", "id")
+)
+```
+
+## 7.2 Ý nghĩa
+- Admin thấy tất cả bảng lương
+- Mọi user khác, kể cả leader, chỉ thấy lương của chính mình
+
+## 7.3 Are updates allowed?
+- Chỉ Admin:
+```appsheet
+LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin"
+```
+
+---
+
+# 8. Slice đề xuất để dùng view dễ hơn
+
+## 8.1 `salon_cua_toi`
+Nguồn: `salon`
+
+Row filter:
+```appsheet
+[sale_id] = LOOKUP(USEREMAIL(), "users", "email", "id")
+```
+
+Dùng cho nhân viên sale.
+
+## 8.2 `salon_toan_bo_sale`
+Nguồn: `salon`
+
+Row filter:
+```appsheet
+TRUE
+```
+
+Chỉ gắn view cho Admin / Leader Sale bằng `Show_If` ở view hoặc menu.
+
+## 8.3 `log_cua_toi`
+Nguồn: `log_sale`
+
+Row filter:
+```appsheet
+[sale_id] = LOOKUP(USEREMAIL(), "users", "email", "id")
+```
+
+## 8.4 `log_toan_bo_sale`
+Nguồn: `log_sale`
+
+Row filter:
+```appsheet
+TRUE
+```
+
+Chỉ gắn view cho Leader Sale / Admin.
+
+## 8.5 `hop_dong_sale`
+Nguồn: `hop_dong_salon`
+
+Row filter:
+```appsheet
+TRUE
+```
+
+Chỉ gắn view cho Leader Sale / Admin.
+
+---
+
+# 9. View Show_If gợi ý
+
+## 9.1 View `Salon của tôi`
+```appsheet
+AND(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Nhân viên",
+  LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+)
+```
+
+## 9.2 View `Quản lý salon`
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  )
+)
+```
+
+## 9.3 View `Salon vận hành`
+```appsheet
+LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Vận hành"
+```
+
+## 9.4 View `Hợp đồng`
+```appsheet
+OR(
+  LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Admin",
+  AND(
+    LOOKUP(USEREMAIL(), "users", "email", "vai_tro") = "Leader",
+    LOOKUP(USEREMAIL(), "users", "email", "bo_phan") = "Sale"
+  )
+)
+```
+
+## 9.5 View `Bảng lương`
+```appsheet
+TRUE
+```
+
+> Vì security filter đã chặn từ gốc, view này có thể hiện cho tất cả user; mỗi người chỉ thấy phần mình được tải về. Nếu muốn menu gọn hơn vẫn có thể Show_If theo vai trò.
+
+---
+
+# 10. Những điểm nên làm ngay
+
+## 10.1 Bật Require Sign-In
+Không có sign-in thì `USEREMAIL()` không đáng tin.
+
+## 10.2 Dùng Security Filter cho bảng nhạy cảm
+Ưu tiên áp cho:
+- `users`
+- `salon`
+- `log_sale`
+- `hop_dong_salon`
+- `bang_luong`
+- `vw_salon_van_hanh` nếu đây là table/view riêng trong app
+
+## 10.3 Dùng Slice cho UI, không thay cho bảo mật
+Slice chỉ để:
+- chia màn hình
+- chia view
+- gọn menu
+
+## 10.4 Cân nhắc cột helper trong `users`
+Nếu app lớn hơn, có thể thêm virtual columns như:
+- `is_admin`
+- `is_leader_sale`
+- `is_van_hanh`
+
+Hiện tại chưa bắt buộc.
+
+---
+
+# 11. Cảnh báo nhỏ cần biết
+
+## 11.1 `LOOKUP(USEREMAIL(), "users", ...)` lặp lại nhiều lần
+Chạy được, nhưng sau này app lớn có thể dài và khó bảo trì. Giai đoạn đầu vẫn ổn.
+
+## 11.2 Nếu `vw_salon_van_hanh` là database view thật
+Một số nguồn dữ liệu/view có thể bị giới hạn update mode. Trường hợp của anh là read-only nên lại hợp.
+
+## 11.3 Leader Sale xem toàn bộ log và salon
+Đúng với logic anh chốt, nhưng nhớ rằng đây là quyền rộng. Nên menu của leader nên tách rõ để tránh thao tác nhầm.
+
+---
+
+# 12. Chốt cấu hình khuyên dùng theo bảng
+
+## `users`
+- Security Filter: có
+- Slice: có
+- Editable_If: có
+- Update mode: Admin-only hoặc Adds/Updates + khóa từng cột
+
+## `salon`
+- Security Filter: có
+- Slice: có
+- Editable_If: có, đặc biệt ở `sale_id`
+- Update mode: Admin + Leader Sale + Nhân viên Sale
+
+## `vw_salon_van_hanh`
+- Security Filter: có nếu là nguồn riêng
+- Slice: tùy
+- Update mode: Read-only
+
+## `log_sale`
+- Security Filter: có
+- Slice: có
+- Editable_If: có
+- Update mode: Admin + Nhân viên Sale
+
+## `hop_dong_salon`
+- Security Filter: có
+- Slice: tùy
+- Update mode: Admin + Leader Sale
+
+## `bang_luong`
+- Security Filter: có
+- Update mode: Admin-only
